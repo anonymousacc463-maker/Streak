@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shared Tracker Pro</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body { font-family:sans-serif; padding:10px; }
+.box { border:1px solid #ccc; padding:10px; margin:10px; }
+.calendar { display:grid; grid-template-columns:repeat(7,1fr); gap:5px; }
+.day { border:1px solid #aaa; padding:8px; cursor:pointer; }
+.modal { position:fixed; top:10%; left:5%; right:5%; background:#fff; border:2px solid black; padding:10px; display:none; }
+</style>
+</head>
+
+<body>
+
+<div id="login">
+<h2>Login</h2>
+<select id="user">
+<option value="samrat">Samrat</option>
+<option value="saborno">Saborno</option>
+</select>
+<input id="pass" placeholder="password">
+<button onclick="login()">Login</button>
+</div>
+
+<h2>🏆 Leaderboard</h2>
+<div id="leaderboard"></div>
+
+<h2>📅 Calendar</h2>
+<div id="calendar" class="calendar"></div>
+
+<h2>📊 Graph</h2>
+<canvas id="chart"></canvas>
+
+<div id="modal" class="modal">
+<button onclick="modal.style.display='none'">Close</button>
+<div id="samrat" class="box"></div>
+<div id="saborno" class="box"></div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import {
+  getFirestore, doc, setDoc, onSnapshot, getDoc, getDocs, collection
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+/* 🔥🔥🔥 PASTE YOUR FIREBASE CONFIG HERE 🔥🔥🔥 */
+const firebaseConfig = {
+  apiKey: "AIzaSyCV2oB-UEoj33QTYGuyMxYow-DyXCQSLtc",
+  authDomain: "streaks-2561c.firebaseapp.com",
+  projectId: "streaks-2561c",
+  storageBucket: "streaks-2561c.firebasestorage.app",
+  messagingSenderId: "1066833378440",
+  appId: "1:1066833378440:web:a8dfb63653c7001cd0333d",
+  measurementId: "G-L9J6E0R0GH"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const users = { samrat:"samrat123", saborno:"saborno123" };
+let currentUser = localStorage.getItem("user");
+let selectedDate = getToday();
+let chart;
+
+/* LOGIN */
+window.login = function(){
+  const u=user.value, p=pass.value;
+  if(users[u]===p){
+    currentUser=u;
+    localStorage.setItem("user",u);
+    login.style.display="none";
+    init();
+  } else alert("Wrong password");
+};
+
+function getToday(){
+  return new Date().toISOString().split("T")[0];
+}
+
+function ref(date){ return doc(db,"days",date); }
+
+/* INIT */
+function init(){
+  renderCalendar();
+  openDay(selectedDate);
+  loadGraph();
+}
+
+/* REALTIME */
+function listen(date){
+  onSnapshot(ref(date), snap=>{
+    render(snap.data()||{}, date);
+    updateLeaderboard(snap.data()||{});
+  });
+}
+
+/* RENDER */
+function render(data,date){
+  ["samrat","saborno"].forEach(u=>{
+    const d=data[u]||defaultUser();
+    let html=`<h3>${u}</h3>`;
+
+    ["water","workout","read","discipline"].forEach(h=>{
+      const checked=d.habits?.[h]?"checked":"";
+      const dis=u===currentUser?"":"disabled";
+      html+=`<label><input type=checkbox ${checked} ${dis}
+      onchange="toggleHabit('${u}','${h}','${date}')">${h}</label><br>`;
+    });
+
+    const score=Object.values(d.habits||{}).filter(x=>x).length;
+    html+=`Score:${score}<ul>`;
+
+    (d.todos||[]).forEach((t,i)=>{
+      const dis=u===currentUser?"":"disabled";
+      html+=`<li><input type=checkbox ${t.done?"checked":""} ${dis}
+      onchange="toggleTodo('${u}',${i},'${date}')">${t.text}</li>`;
+    });
+
+    html+="</ul>";
+
+    if(u===currentUser){
+      html+=`<input id="${u}-todo"><button onclick="addTodo('${u}','${date}')">Add</button>`;
+    }
+
+    document.getElementById(u).innerHTML=html;
+  });
+}
+
+/* DEFAULT USER */
+function defaultUser(){
+  return {
+    habits:{},
+    todos:[],
+    streak:0,
+    totalScore:0,
+    lastActive:""
+  };
+}
+
+/* HABITS + STREAK */
+window.toggleHabit = async(u,h,date)=>{
+  if(u!==currentUser) return;
+
+  const snap = await getDoc(ref(date));
+  const data = snap.data()||{};
+  let user = data[u]||defaultUser();
+
+  user.habits[h]=!user.habits[h];
+
+  const score = Object.values(user.habits).filter(x=>x).length;
+  const yesterday = new Date(Date.now()-86400000).toISOString().split("T")[0];
+
+  if(user.lastActive===yesterday && score>0) user.streak++;
+  else if(score>0) user.streak=1;
+
+  user.lastActive=date;
+  user.totalScore++;
+
+  await setDoc(ref(date), {[u]:user}, {merge:true});
+};
+
+/* TODOS */
+window.addTodo = async(u,date)=>{
+  const input=document.getElementById(u+"-todo");
+  const text=input.value; input.value="";
+
+  const snap = await getDoc(ref(date));
+  const data = snap.data()||{};
+  const todos = data[u]?.todos || [];
+
+  todos.push({text,done:false});
+
+  await setDoc(ref(date), {[u]:{todos}}, {merge:true});
+};
+
+window.toggleTodo = async(u,i,date)=>{
+  if(u!==currentUser) return;
+
+  const snap = await getDoc(ref(date));
+  const data = snap.data();
+  const todos = data[u].todos;
+
+  todos[i].done=!todos[i].done;
+
+  await setDoc(ref(date), {[u]:{todos}}, {merge:true});
+};
+
+/* CALENDAR */
+function renderCalendar(){
+  calendar.innerHTML="";
+  for(let i=1;i<=31;i++){
+    const d=`2026-04-${String(i).padStart(2,"0")}`;
+    calendar.innerHTML+=`<div class="day" onclick="openDay('${d}')">${i}</div>`;
+  }
+}
+
+window.openDay = function(date){
+  selectedDate=date;
+  modal.style.display="block";
+  listen(date);
+};
+
+/* LEADERBOARD */
+function updateLeaderboard(data){
+  const s=data.samrat||{};
+  const sa=data.saborno||{};
+
+  let leader="Tie";
+  if((s.totalScore||0)>(sa.totalScore||0)) leader="Samrat 🔥";
+  else if((sa.totalScore||0)>(s.totalScore||0)) leader="Saborno 🔥";
+
+  leaderboard.innerHTML=`
+    Leader: ${leader}<br>
+    Samrat → Score:${s.totalScore||0}, Streak:${s.streak||0}<br>
+    Saborno → Score:${sa.totalScore||0}, Streak:${sa.streak||0}
+  `;
+}
+
+/* GRAPH */
+async function loadGraph(){
+  const querySnap = await getDocs(collection(db,"days"));
+
+  const labels=[], sData=[], saData=[];
+
+  querySnap.forEach(doc=>{
+    const d=doc.data();
+    labels.push(doc.id);
+
+    const score=(u)=>Object.values(d[u]?.habits||{}).filter(x=>x).length;
+
+    sData.push(score("samrat"));
+    saData.push(score("saborno"));
+  });
+
+  chart = new Chart(document.getElementById("chart"),{
+    type:"line",
+    data:{
+      labels,
+      datasets:[
+        {label:"Samrat", data:sData},
+        {label:"Saborno", data:saData}
+      ]
+    }
+  });
+}
+
+/* AUTO LOGIN */
+if(currentUser){
+  login.style.display="none";
+  init();
+}
+</script>
+
+</body>
+</html>
