@@ -57,12 +57,15 @@ label { display:block; margin-top:6px; }
 </div>
 
 <script>
-/* ================= CONFIG ================= */
+document.addEventListener("DOMContentLoaded", () => {
+
+/* ================= USERS ================= */
 const users = {
   samrat: "samrat123",
   saborno: "saborno123"
 };
 
+/* ================= CONFIG ================= */
 const BIN_ID = "YOUR_BIN_ID";
 const API_KEY = "YOUR_API_KEY";
 
@@ -78,7 +81,7 @@ let habitsState = {
   discipline: false
 };
 
-/* ================= SAFE DOM ================= */
+/* ================= DOM ================= */
 const loginCard = document.getElementById("loginCard");
 const app = document.getElementById("app");
 const welcome = document.getElementById("welcome");
@@ -105,7 +108,7 @@ function logout() {
   location.reload();
 }
 
-/* ================= START APP ================= */
+/* ================= START ================= */
 function start() {
   loginCard.style.display = "none";
   app.style.display = "block";
@@ -130,14 +133,13 @@ function renderHabits() {
   habits.innerHTML = html;
 }
 
-function toggleHabit(h) {
+window.toggleHabit = function(h) {
   habitsState[h] = !habitsState[h];
-}
+};
 
 /* ================= SUBMIT ================= */
 function submitData() {
   const scoreVal = Object.values(habitsState).filter(Boolean).length;
-
   scoreText.innerText = "Score: " + scoreVal;
 
   const today = new Date().toISOString().split("T")[0];
@@ -162,7 +164,7 @@ function sendData() {
     body: JSON.stringify(db)
   })
   .then(() => fetchData())
-  .catch(err => console.log("Send error:", err));
+  .catch(err => console.log(err));
 }
 
 /* ================= FETCH ================= */
@@ -173,9 +175,7 @@ function fetchData() {
     try {
       db = JSON.parse(cached);
       drawChart();
-    } catch (e) {
-      console.log("Cache error");
-    }
+    } catch (e) {}
   }
 
   fetch(https://api.jsonbin.io/v3/b/${BIN_ID}/latest, {
@@ -189,12 +189,12 @@ function fetchData() {
     localStorage.setItem("db", JSON.stringify(db));
     drawChart();
   })
-  .catch(err => console.log("Fetch error:", err));
+  .catch(err => console.log(err));
 }
 
 /* ================= CHART ================= */
 function drawChart() {
-  const labels = Object.keys(db).sort((a, b) => new Date(a) - new Date(b));
+  const labels = Object.keys(db).sort((a,b)=>new Date(a)-new Date(b));
   if (!labels.length) return;
 
   const samratData = labels.map(d => db[d]?.samrat || 0);
@@ -202,12 +202,10 @@ function drawChart() {
 
   if (chart) chart.destroy();
 
-  const ctx = document.getElementById("chart");
-
-  chart = new Chart(ctx, {
+  chart = new Chart(document.getElementById("chart"), {
     type: "line",
     data: {
-      labels: labels,
+      labels,
       datasets: [
         { label: "Samrat", data: samratData },
         { label: "Saborno", data: sabornoData }
@@ -224,9 +222,9 @@ document.getElementById("submitBtn").addEventListener("click", submitData);
 /* ================= INIT ================= */
 fetchData();
 
-if (currentUser) {
-  start();
-}
+if (currentUser) start();
+
+});
 </script>
 
 </body>
