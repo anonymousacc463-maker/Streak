@@ -7,43 +7,12 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-body {
-  font-family: Arial;
-  background: #0f172a;
-  color: white;
-  margin: 0;
-}
-.container {
-  max-width: 500px;
-  margin: auto;
-  padding: 15px;
-}
-.card {
-  background: #1e293b;
-  padding: 15px;
-  margin-top: 12px;
-  border-radius: 12px;
-}
-button {
-  width: 100%;
-  padding: 10px;
-  background: #22c55e;
-  border: none;
-  color: white;
-  border-radius: 8px;
-  margin-top: 8px;
-}
-input, select {
-  width: 100%;
-  padding: 8px;
-  margin-top: 5px;
-  border-radius: 6px;
-  border: none;
-}
-label {
-  display: block;
-  margin-top: 6px;
-}
+body { font-family: Arial; background:#0f172a; color:white; margin:0; }
+.container { max-width:500px; margin:auto; padding:15px; }
+.card { background:#1e293b; padding:15px; margin-top:12px; border-radius:12px; }
+button { width:100%; padding:10px; background:#22c55e; border:none; color:white; border-radius:8px; margin-top:8px; }
+input, select { width:100%; padding:8px; margin-top:5px; border-radius:6px; border:none; }
+label { display:block; margin-top:6px; }
 </style>
 </head>
 
@@ -61,7 +30,7 @@ label {
 </select>
 
 <input id="pass" placeholder="password">
-<button onclick="login()">Login</button>
+<button onclick="window.login()">Login</button>
 
 <h4>📊 Shared Progress</h4>
 <canvas id="chart"></canvas>
@@ -72,13 +41,13 @@ label {
 
 <div class="card">
 <h3 id="welcome"></h3>
-<button onclick="logout()">Logout</button>
+<button onclick="window.logout()">Logout</button>
 </div>
 
 <div class="card">
 <h3>🔥 Habits</h3>
 <div id="habits"></div>
-<button onclick="submitData()">Submit</button>
+<button onclick="window.submitData()">Submit</button>
 <p id="score"></p>
 </div>
 
@@ -90,11 +59,9 @@ label {
 const users = { samrat:"samrat123", saborno:"saborno123" };
 let currentUser = localStorage.getItem("user");
 
-// 🔥 JSONBIN CONFIG
-const BIN_ID = "69f23c0baaba882197515195";
-const API_KEY = "$2a$10$HAaJlIo1IbMYWbKyJr5CfODvyZlUMbxeKw1/JMsMM7PbC5WPaKXry";
+const BIN_ID = "YOUR_BIN_ID";
+const API_KEY = "YOUR_API_KEY";
 
-// 🔥 DATABASE OBJECT (NEW STRUCTURE)
 let db = {};
 let chart;
 
@@ -128,13 +95,13 @@ function start(){
   fetchData();
 }
 
-/* HABITS UI */
+/* HABITS */
 function renderHabits(){
   let html="";
   for(let h in habitsState){
     html+=`
     <label>
-      <input type="checkbox" onchange="toggleHabit('${h}')">
+      <input type="checkbox" onchange="window.toggleHabit('${h}')">
       ${h}
     </label>`;
   }
@@ -145,7 +112,7 @@ function toggleHabit(h){
   habitsState[h]=!habitsState[h];
 }
 
-/* SUBMIT (OVERWRITE SYSTEM) */
+/* SUBMIT */
 function submitData(){
   const scoreVal = Object.values(habitsState).filter(x=>x).length;
   document.getElementById("score").innerText = "Score: " + scoreVal;
@@ -156,13 +123,12 @@ function submitData(){
     db[today] = { samrat:0, saborno:0 };
   }
 
-  // 🔥 overwrite only current user
   db[today][currentUser] = scoreVal;
 
   sendData();
 }
 
-/* SEND TO JSONBIN */
+/* SEND */
 function sendData(){
   fetch(https://api.jsonbin.io/v3/b/${BIN_ID},{
     method:"PUT",
@@ -175,21 +141,32 @@ function sendData(){
   .then(()=> fetchData());
 }
 
-/* FETCH DATA */
+/* FETCH (FAST + CACHE) */
 function fetchData(){
+
+  // ⚡ Instant load from cache
+  const cached = localStorage.getItem("db");
+  if(cached){
+    db = JSON.parse(cached);
+    drawChart();
+  }
+
+  // 🌐 Fetch latest
   fetch(https://api.jsonbin.io/v3/b/${BIN_ID}/latest,{
     headers:{ "X-Master-Key":API_KEY }
   })
   .then(res=>res.json())
   .then(data=>{
     db = data.record || {};
+    localStorage.setItem("db", JSON.stringify(db));
     drawChart();
   });
 }
 
-/* DRAW GRAPH */
+/* GRAPH */
 function drawChart(){
   const labels = Object.keys(db).sort((a,b)=> new Date(a)-new Date(b));
+  if(!labels.length) return;
 
   const samratData = labels.map(d => db[d]?.samrat || 0);
   const sabornoData = labels.map(d => db[d]?.saborno || 0);
@@ -201,18 +178,18 @@ function drawChart(){
     data:{
       labels:labels,
       datasets:[
-        {
-          label:"Samrat",
-          data:samratData
-        },
-        {
-          label:"Saborno",
-          data:sabornoData
-        }
+        { label:"Samrat", data:samratData },
+        { label:"Saborno", data:sabornoData }
       ]
     }
   });
 }
+
+/* EXPOSE FUNCTIONS (FIX) */
+window.login = login;
+window.logout = logout;
+window.submitData = submitData;
+window.toggleHabit = toggleHabit;
 
 /* AUTO LOAD */
 fetchData();
