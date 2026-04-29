@@ -30,7 +30,8 @@ label { display:block; margin-top:6px; }
 </select>
 
 <input id="pass" placeholder="password">
-<button onclick="window.login()">Login</button>
+
+<button id="loginBtn">Login</button>
 
 <h4>📊 Shared Progress</h4>
 <canvas id="chart"></canvas>
@@ -41,13 +42,13 @@ label { display:block; margin-top:6px; }
 
 <div class="card">
 <h3 id="welcome"></h3>
-<button onclick="window.logout()">Logout</button>
+<button id="logoutBtn">Logout</button>
 </div>
 
 <div class="card">
 <h3>🔥 Habits</h3>
 <div id="habits"></div>
-<button onclick="window.submitData()">Submit</button>
+<button id="submitBtn">Submit</button>
 <p id="score"></p>
 </div>
 
@@ -56,71 +57,93 @@ label { display:block; margin-top:6px; }
 </div>
 
 <script>
-const users = { samrat:"samrat123", saborno:"saborno123" };
-let currentUser = localStorage.getItem("user");
-
-const BIN_ID = "69f23c0baaba882197515195";
-const API_KEY = "$2a$10$HAaJlIo1IbMYWbKyJr5CfODvyZlUMbxeKw1/JMsMM7PbC5WPaKXry";
-
-let db = {};
-let chart;
-
-let habitsState = {
-  water:false,
-  workout:false,
-  read:false,
-  discipline:false
+/* ================= CONFIG ================= */
+const users = {
+  samrat: "samrat123",
+  saborno: "saborno123"
 };
 
-/* LOGIN */
-function login(){
-  if(users[user.value]===pass.value){
-    currentUser=user.value;
-    localStorage.setItem("user",currentUser);
+const BIN_ID = "YOUR_BIN_ID";
+const API_KEY = "YOUR_API_KEY";
+
+/* ================= STATE ================= */
+let currentUser = localStorage.getItem("user");
+let db = {};
+let chart = null;
+
+let habitsState = {
+  water: false,
+  workout: false,
+  read: false,
+  discipline: false
+};
+
+/* ================= SAFE DOM ================= */
+const loginCard = document.getElementById("loginCard");
+const app = document.getElementById("app");
+const welcome = document.getElementById("welcome");
+const habits = document.getElementById("habits");
+const scoreText = document.getElementById("score");
+
+/* ================= LOGIN ================= */
+function login() {
+  const userVal = document.getElementById("user").value;
+  const passVal = document.getElementById("pass").value;
+
+  if (users[userVal] === passVal) {
+    currentUser = userVal;
+    localStorage.setItem("user", currentUser);
     start();
-  } else alert("Wrong password");
+  } else {
+    alert("Wrong password");
+  }
 }
 
-function logout(){
+/* ================= LOGOUT ================= */
+function logout() {
   localStorage.removeItem("user");
   location.reload();
 }
 
-/* START */
-function start(){
-  loginCard.style.display="none";
-  app.style.display="block";
-  welcome.innerText="Hello "+currentUser;
+/* ================= START APP ================= */
+function start() {
+  loginCard.style.display = "none";
+  app.style.display = "block";
+  welcome.innerText = "Hello " + currentUser;
+
   renderHabits();
   fetchData();
 }
 
-/* HABITS */
-function renderHabits(){
-  let html="";
-  for(let h in habitsState){
-    html+=`
-    <label>
-      <input type="checkbox" onchange="window.toggleHabit('${h}')">
-      ${h}
-    </label>`;
+/* ================= HABITS ================= */
+function renderHabits() {
+  let html = "";
+
+  for (let h in habitsState) {
+    html += `
+      <label>
+        <input type="checkbox" onchange="toggleHabit('${h}')">
+        ${h}
+      </label>`;
   }
-  habits.innerHTML=html;
+
+  habits.innerHTML = html;
 }
 
-function toggleHabit(h){
-  habitsState[h]=!habitsState[h];
+function toggleHabit(h) {
+  habitsState[h] = !habitsState[h];
 }
 
-/* SUBMIT */
-function submitData(){
-  const scoreVal = Object.values(habitsState).filter(x=>x).length;
-  document.getElementById("score").innerText = "Score: " + scoreVal;
+/* ================= SUBMIT ================= */
+function submitData() {
+  const scoreVal = Object.values(habitsState).filter(Boolean).length;
+
+  scoreText.innerText = "Score: " + scoreVal;
 
   const today = new Date().toISOString().split("T")[0];
 
-  if(!db[today]){
-    db[today] = { samrat:0, saborno:0 };
+  if (!db[today]) {
+    db[today] = { samrat: 0, saborno: 0 };
   }
 
   db[today][currentUser] = scoreVal;
@@ -128,73 +151,80 @@ function submitData(){
   sendData();
 }
 
-/* SEND */
-function sendData(){
-  fetch(https://api.jsonbin.io/v3/b/${BIN_ID},{
-    method:"PUT",
-    headers:{
-      "Content-Type":"application/json",
-      "X-Master-Key":API_KEY
+/* ================= SEND ================= */
+function sendData() {
+  fetch(https://api.jsonbin.io/v3/b/${BIN_ID}, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Master-Key": API_KEY
     },
     body: JSON.stringify(db)
   })
-  .then(()=> fetchData());
+  .then(() => fetchData())
+  .catch(err => console.log("Send error:", err));
 }
 
-/* FETCH (FAST + CACHE) */
-function fetchData(){
-
-  // ⚡ Instant load from cache
+/* ================= FETCH ================= */
+function fetchData() {
   const cached = localStorage.getItem("db");
-  if(cached){
-    db = JSON.parse(cached);
-    drawChart();
+
+  if (cached) {
+    try {
+      db = JSON.parse(cached);
+      drawChart();
+    } catch (e) {
+      console.log("Cache error");
+    }
   }
 
-  // 🌐 Fetch latest
-  fetch(https://api.jsonbin.io/v3/b/${BIN_ID}/latest,{
-    headers:{ "X-Master-Key":API_KEY }
+  fetch(https://api.jsonbin.io/v3/b/${BIN_ID}/latest, {
+    headers: {
+      "X-Master-Key": API_KEY
+    }
   })
-  .then(res=>res.json())
-  .then(data=>{
+  .then(res => res.json())
+  .then(data => {
     db = data.record || {};
     localStorage.setItem("db", JSON.stringify(db));
     drawChart();
-  });
+  })
+  .catch(err => console.log("Fetch error:", err));
 }
 
-/* GRAPH */
-function drawChart(){
-  const labels = Object.keys(db).sort((a,b)=> new Date(a)-new Date(b));
-  if(!labels.length) return;
+/* ================= CHART ================= */
+function drawChart() {
+  const labels = Object.keys(db).sort((a, b) => new Date(a) - new Date(b));
+  if (!labels.length) return;
 
   const samratData = labels.map(d => db[d]?.samrat || 0);
   const sabornoData = labels.map(d => db[d]?.saborno || 0);
 
-  if(chart) chart.destroy();
+  if (chart) chart.destroy();
 
-  chart = new Chart(document.getElementById("chart"),{
-    type:"line",
-    data:{
-      labels:labels,
-      datasets:[
-        { label:"Samrat", data:samratData },
-        { label:"Saborno", data:sabornoData }
+  const ctx = document.getElementById("chart");
+
+  chart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: labels,
+      datasets: [
+        { label: "Samrat", data: samratData },
+        { label: "Saborno", data: sabornoData }
       ]
     }
   });
 }
 
-/* EXPOSE FUNCTIONS (FIX) */
-window.login = login;
-window.logout = logout;
-window.submitData = submitData;
-window.toggleHabit = toggleHabit;
+/* ================= EVENTS ================= */
+document.getElementById("loginBtn").addEventListener("click", login);
+document.getElementById("logoutBtn").addEventListener("click", logout);
+document.getElementById("submitBtn").addEventListener("click", submitData);
 
-/* AUTO LOAD */
+/* ================= INIT ================= */
 fetchData();
 
-if(currentUser){
+if (currentUser) {
   start();
 }
 </script>
