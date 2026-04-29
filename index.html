@@ -2,17 +2,48 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Streak Cloud</title>
+<title>Streak Cloud Pro</title>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-body { font-family:sans-serif; background:#0f172a; color:white; margin:0; }
-.container { max-width:500px; margin:auto; padding:15px; }
-.card { background:#1e293b; padding:15px; margin-top:10px; border-radius:10px; }
-button { width:100%; padding:10px; background:#22c55e; border:none; color:white; border-radius:8px; margin-top:8px; }
-input, select { width:100%; padding:8px; margin-top:5px; border-radius:6px; border:none; }
-label { display:block; margin-top:6px; }
+body {
+  font-family: Arial;
+  background: #0f172a;
+  color: white;
+  margin: 0;
+}
+.container {
+  max-width: 500px;
+  margin: auto;
+  padding: 15px;
+}
+.card {
+  background: #1e293b;
+  padding: 15px;
+  margin-top: 12px;
+  border-radius: 12px;
+}
+button {
+  width: 100%;
+  padding: 10px;
+  background: #22c55e;
+  border: none;
+  color: white;
+  border-radius: 8px;
+  margin-top: 8px;
+}
+input, select {
+  width: 100%;
+  padding: 8px;
+  margin-top: 5px;
+  border-radius: 6px;
+  border: none;
+}
+label {
+  display: block;
+  margin-top: 6px;
+}
 </style>
 </head>
 
@@ -63,10 +94,15 @@ let currentUser = localStorage.getItem("user");
 const BIN_ID = "69f23c0baaba882197515195";
 const API_KEY = "$2a$10$HAaJlIo1IbMYWbKyJr5CfODvyZlUMbxeKw1/JMsMM7PbC5WPaKXry";
 
-let logs = [];
+// 🔥 DATABASE OBJECT (NEW STRUCTURE)
+let db = {};
 let chart;
+
 let habitsState = {
-  water:false, workout:false, read:false, discipline:false
+  water:false,
+  workout:false,
+  read:false,
+  discipline:false
 };
 
 /* LOGIN */
@@ -98,8 +134,8 @@ function renderHabits(){
   for(let h in habitsState){
     html+=`
     <label>
-    <input type="checkbox" onchange="toggleHabit('${h}')">
-    ${h}
+      <input type="checkbox" onchange="toggleHabit('${h}')">
+      ${h}
     </label>`;
   }
   habits.innerHTML=html;
@@ -109,73 +145,54 @@ function toggleHabit(h){
   habitsState[h]=!habitsState[h];
 }
 
-/* SUBMIT DATA */
+/* SUBMIT (OVERWRITE SYSTEM) */
 function submitData(){
-  const score = Object.values(habitsState).filter(x=>x).length;
-  score.innerText = "Score: " + score;
+  const scoreVal = Object.values(habitsState).filter(x=>x).length;
+  document.getElementById("score").innerText = "Score: " + scoreVal;
 
-  const entry = {
-    date: new Date().toISOString().split("T")[0],
-    user: currentUser,
-    score: score
-  };
+  const today = new Date().toISOString().split("T")[0];
 
-  logs.push(entry);
+  if(!db[today]){
+    db[today] = { samrat:0, saborno:0 };
+  }
+
+  // 🔥 overwrite only current user
+  db[today][currentUser] = scoreVal;
+
   sendData();
 }
 
 /* SEND TO JSONBIN */
 function sendData(){
-  fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`,{
+  fetch(https://api.jsonbin.io/v3/b/${BIN_ID},{
     method:"PUT",
     headers:{
       "Content-Type":"application/json",
       "X-Master-Key":API_KEY
     },
-    body: JSON.stringify(logs)
+    body: JSON.stringify(db)
   })
-  .then(()=>{
-    fetchData();
-  });
+  .then(()=> fetchData());
 }
 
 /* FETCH DATA */
 function fetchData(){
-  fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`,{
+  fetch(https://api.jsonbin.io/v3/b/${BIN_ID}/latest,{
     headers:{ "X-Master-Key":API_KEY }
   })
   .then(res=>res.json())
   .then(data=>{
-    logs = data.record || [];
+    db = data.record || {};
     drawChart();
   });
 }
 
 /* DRAW GRAPH */
 function drawChart(){
-  const labels = [];
-  const samratData = [];
-  const sabornoData = [];
+  const labels = Object.keys(db).sort((a,b)=> new Date(a)-new Date(b));
 
-  logs.forEach(e=>{
-    if(!labels.includes(e.date)) labels.push(e.date);
-  });
-
-  labels.sort();
-
-  labels.forEach(date=>{
-    let s=0, sa=0;
-
-    logs.forEach(e=>{
-      if(e.date===date){
-        if(e.user==="samrat") s=e.score;
-        if(e.user==="saborno") sa=e.score;
-      }
-    });
-
-    samratData.push(s);
-    sabornoData.push(sa);
-  });
+  const samratData = labels.map(d => db[d]?.samrat || 0);
+  const sabornoData = labels.map(d => db[d]?.saborno || 0);
 
   if(chart) chart.destroy();
 
@@ -184,8 +201,14 @@ function drawChart(){
     data:{
       labels:labels,
       datasets:[
-        { label:"Samrat", data:samratData },
-        { label:"Saborno", data:sabornoData }
+        {
+          label:"Samrat",
+          data:samratData
+        },
+        {
+          label:"Saborno",
+          data:sabornoData
+        }
       ]
     }
   });
