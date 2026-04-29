@@ -4,15 +4,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Streak Tracker</title>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 <style>
-body { font-family:sans-serif; margin:0; background:#f5f5f5; }
-.container { padding:15px; max-width:500px; margin:auto; }
+body { font-family:sans-serif; margin:0; background:#f4f4f4; }
+.container { max-width:500px; margin:auto; padding:10px; }
 .card { background:white; padding:15px; margin-top:10px; border-radius:10px; }
-button { padding:8px 12px; border:none; border-radius:6px; background:black; color:white; }
-input { padding:8px; margin-top:5px; width:100%; }
-.day { display:inline-block; width:40px; margin:2px; padding:5px; background:white; text-align:center; cursor:pointer; }
+button { padding:8px; background:black; color:white; border:none; border-radius:5px; }
+input { padding:8px; width:100%; margin-top:5px; }
+.day { display:inline-block; width:40px; margin:3px; padding:5px; text-align:center; cursor:pointer; background:white; }
 .active { background:black; color:white; }
 </style>
 </head>
@@ -39,6 +37,11 @@ input { padding:8px; margin-top:5px; width:100%; }
 </div>
 
 <div class="card">
+<h3>🏆 Leaderboard</h3>
+<div id="leaderboard"></div>
+</div>
+
+<div class="card">
 <h3>📅 Calendar</h3>
 <div id="calendar"></div>
 </div>
@@ -47,6 +50,7 @@ input { padding:8px; margin-top:5px; width:100%; }
 <h3>🔥 Habits</h3>
 <div id="habits"></div>
 <p id="score"></p>
+<p id="streak"></p>
 </div>
 
 <div class="card">
@@ -60,105 +64,91 @@ input { padding:8px; margin-top:5px; width:100%; }
 
 </div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, onSnapshot }
-from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-/* 🔥 PASTE FIREBASE CONFIG HERE */
-const firebaseConfig = {
-  apiKey: "AIzaSyCV2oB-UEoj33QTYGuyMxYow-DyXCQSLtc",
-  authDomain: "streaks-2561c.firebaseapp.com",
-  projectId: "streaks-2561c",
-  storageBucket: "streaks-2561c.firebasestorage.app",
-  messagingSenderId: "1066833378440",
-  appId: "1:1066833378440:web:a8dfb63653c7001cd0333d",
-  measurementId: "G-L9J6E0R0GH"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-
+<script>
 const users = { samrat:"samrat123", saborno:"saborno123" };
 let currentUser = localStorage.getItem("user");
 let selectedDate = today();
+let data = JSON.parse(localStorage.getItem("data")) || {};
 
 function today(){
   return new Date().toISOString().split("T")[0];
 }
 
-function ref(date){
-  return doc(db,"days",date);
+function save(){
+  localStorage.setItem("data", JSON.stringify(data));
 }
 
-window.login = function(){
+function defaultUser(){
+  return {
+    habits:{ water:false, workout:false, read:false, discipline:false },
+    todos:[],
+    streak:0,
+    lastActive:""
+  };
+}
+
+function login(){
   if(users[user.value] === pass.value){
     currentUser = user.value;
     localStorage.setItem("user",currentUser);
     start();
   } else alert("Wrong password");
-};
+}
 
-window.logout = function(){
+function logout(){
   localStorage.removeItem("user");
   location.reload();
-};
+}
 
 function start(){
   loginCard.style.display="none";
   app.style.display="block";
-  welcome.innerText = "Hello " + currentUser;
-
+  welcome.innerText="Hello "+currentUser;
   renderCalendar();
-  loadDay(selectedDate);
+  openDay(selectedDate);
+}
+
+function initDay(date){
+  if(!data[date]){
+    data[date]={ samrat:defaultUser(), saborno:defaultUser() };
+  }
 }
 
 function renderCalendar(){
   calendar.innerHTML="";
   for(let i=1;i<=30;i++){
     const d=`2026-04-${String(i).padStart(2,"0")}`;
-    calendar.innerHTML += `<div class="day ${d===selectedDate?"active":""}" onclick="changeDate('${d}')">${i}</div>`;
+    calendar.innerHTML+=`<div class="day ${d===selectedDate?"active":""}" onclick="openDay('${d}')">${i}</div>`;
   }
 }
 
-window.changeDate = function(d){
-  selectedDate = d;
+function openDay(date){
+  selectedDate=date;
+  initDay(date);
   renderCalendar();
-  loadDay(d);
-};
-
-function defaultData(){
-  return {
-    habits:{ water:false, workout:false, read:false, discipline:false },
-    todos:[]
-  };
+  render();
+  updateLeaderboard();
 }
 
-function loadDay(date){
-  onSnapshot(ref(date), snap=>{
-    const data = snap.data() || {};
-    render(data[currentUser] || defaultData(), data);
-  });
-}
+function render(){
+  const d = data[selectedDate][currentUser];
 
-function render(userData, allData){
-  // habits
   habits.innerHTML="";
-  Object.keys(userData.habits).forEach(h=>{
-    habits.innerHTML += `
+  Object.keys(d.habits).forEach(h=>{
+    habits.innerHTML+=`
     <label>
-    <input type="checkbox" ${userData.habits[h]?"checked":""}
-    onchange="toggleHabit('${h}')">
-    ${h}
+    <input type="checkbox" ${d.habits[h]?"checked":""}
+    onchange="toggleHabit('${h}')">${h}
     </label><br>`;
   });
 
-  score.innerText = "Score: " + Object.values(userData.habits).filter(x=>x).length;
+  const scoreVal = Object.values(d.habits).filter(x=>x).length;
+  score.innerText="Score: "+scoreVal;
+  streak.innerText="Streak: "+d.streak;
 
-  // todos
   todos.innerHTML="";
-  userData.todos.forEach((t,i)=>{
-    todos.innerHTML += `
+  d.todos.forEach((t,i)=>{
+    todos.innerHTML+=`
     <div>
     <input type="checkbox" ${t.done?"checked":""}
     onchange="toggleTodo(${i})">
@@ -167,36 +157,55 @@ function render(userData, allData){
   });
 }
 
-window.toggleHabit = async function(h){
-  const snap = await getDoc(ref(selectedDate));
-  const data = snap.data() || {};
-  const userData = data[currentUser] || defaultData();
+function toggleHabit(h){
+  const d = data[selectedDate][currentUser];
+  d.habits[h]=!d.habits[h];
 
-  userData.habits[h] = !userData.habits[h];
+  const scoreVal = Object.values(d.habits).filter(x=>x).length;
+  const yesterday = new Date(Date.now()-86400000).toISOString().split("T")[0];
 
-  await setDoc(ref(selectedDate), { [currentUser]: userData }, { merge:true });
-};
+  if(d.lastActive===yesterday && scoreVal>0) d.streak++;
+  else if(scoreVal>0) d.streak=1;
 
-window.addTodo = async function(){
-  const snap = await getDoc(ref(selectedDate));
-  const data = snap.data() || {};
-  const userData = data[currentUser] || defaultData();
+  d.lastActive=selectedDate;
 
-  userData.todos.push({ text:todoInput.value, done:false });
+  save();
+  render();
+  updateLeaderboard();
+}
+
+function addTodo(){
+  const d = data[selectedDate][currentUser];
+  d.todos.push({ text:todoInput.value, done:false });
   todoInput.value="";
+  save();
+  render();
+}
 
-  await setDoc(ref(selectedDate), { [currentUser]: userData }, { merge:true });
-};
+function toggleTodo(i){
+  const t = data[selectedDate][currentUser].todos[i];
+  t.done=!t.done;
+  save();
+  render();
+}
 
-window.toggleTodo = async function(i){
-  const snap = await getDoc(ref(selectedDate));
-  const data = snap.data();
-  const userData = data[currentUser];
+function updateLeaderboard(){
+  let sScore=0, saScore=0;
 
-  userData.todos[i].done = !userData.todos[i].done;
+  Object.values(data).forEach(day=>{
+    sScore += Object.values(day.samrat.habits).filter(x=>x).length;
+    saScore += Object.values(day.saborno.habits).filter(x=>x).length;
+  });
 
-  await setDoc(ref(selectedDate), { [currentUser]: userData }, { merge:true });
-};
+  let leader="Tie";
+  if(sScore>saScore) leader="Samrat 🔥";
+  else if(saScore>sScore) leader="Saborno 🔥";
+
+  leaderboard.innerHTML=`
+  Leader: ${leader}<br>
+  Samrat: ${sScore}<br>
+  Saborno: ${saScore}`;
+}
 
 if(currentUser){
   start();
