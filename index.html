@@ -2,18 +2,17 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Streak Tracker</title>
+<title>Streak Cloud</title>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-body { font-family:sans-serif; margin:0; background:#f4f4f4; }
-.container { max-width:500px; margin:auto; padding:10px; }
-.card { background:white; padding:15px; margin-top:10px; border-radius:10px; }
-button { padding:8px; background:black; color:white; border:none; border-radius:5px; }
-input { padding:8px; width:100%; margin-top:5px; }
-.day { display:inline-block; width:40px; margin:3px; padding:5px; text-align:center; cursor:pointer; background:white; }
-.active { background:black; color:white; }
+body { font-family:sans-serif; background:#0f172a; color:white; margin:0; }
+.container { max-width:500px; margin:auto; padding:15px; }
+.card { background:#1e293b; padding:15px; margin-top:10px; border-radius:10px; }
+button { width:100%; padding:10px; background:#22c55e; border:none; color:white; border-radius:8px; margin-top:8px; }
+input, select { width:100%; padding:8px; margin-top:5px; border-radius:6px; border:none; }
+label { display:block; margin-top:6px; }
 </style>
 </head>
 
@@ -21,6 +20,7 @@ input { padding:8px; width:100%; margin-top:5px; }
 
 <div class="container">
 
+<!-- LOGIN -->
 <div id="loginCard" class="card">
 <h3>Login</h3>
 
@@ -33,10 +33,10 @@ input { padding:8px; width:100%; margin-top:5px; }
 <button onclick="login()">Login</button>
 
 <h4>📊 Shared Progress</h4>
-<canvas id="loginChart"></canvas>
-
+<canvas id="chart"></canvas>
 </div>
 
+<!-- APP -->
 <div id="app" style="display:none">
 
 <div class="card">
@@ -45,27 +45,10 @@ input { padding:8px; width:100%; margin-top:5px; }
 </div>
 
 <div class="card">
-<h3>🏆 Leaderboard</h3>
-<div id="leaderboard"></div>
-</div>
-
-<div class="card">
-<h3>📅 Calendar</h3>
-<div id="calendar"></div>
-</div>
-
-<div class="card">
 <h3>🔥 Habits</h3>
 <div id="habits"></div>
+<button onclick="submitData()">Submit</button>
 <p id="score"></p>
-<p id="streak"></p>
-</div>
-
-<div class="card">
-<h3>📝 Todos</h3>
-<div id="todos"></div>
-<input id="todoInput" placeholder="Add task">
-<button onclick="addTodo()">Add</button>
 </div>
 
 </div>
@@ -75,30 +58,21 @@ input { padding:8px; width:100%; margin-top:5px; }
 <script>
 const users = { samrat:"samrat123", saborno:"saborno123" };
 let currentUser = localStorage.getItem("user");
-let selectedDate = today();
-let data = JSON.parse(localStorage.getItem("data")) || {};
-let chartInstance;
 
-function today(){
-  return new Date().toISOString().split("T")[0];
-}
+// 🔥 JSONBIN CONFIG
+const BIN_ID = "YOUR_BIN_ID";
+const API_KEY = "YOUR_API_KEY";
 
-function save(){
-  localStorage.setItem("data", JSON.stringify(data));
-}
+let logs = [];
+let chart;
+let habitsState = {
+  water:false, workout:false, read:false, discipline:false
+};
 
-function defaultUser(){
-  return {
-    habits:{ water:false, workout:false, read:false, discipline:false },
-    todos:[],
-    streak:0,
-    lastActive:""
-  };
-}
-
+/* LOGIN */
 function login(){
-  if(users[user.value] === pass.value){
-    currentUser = user.value;
+  if(users[user.value]===pass.value){
+    currentUser=user.value;
     localStorage.setItem("user",currentUser);
     start();
   } else alert("Wrong password");
@@ -109,148 +83,116 @@ function logout(){
   location.reload();
 }
 
+/* START */
 function start(){
   loginCard.style.display="none";
   app.style.display="block";
   welcome.innerText="Hello "+currentUser;
-  renderCalendar();
-  openDay(selectedDate);
+  renderHabits();
+  fetchData();
 }
 
-function initDay(date){
-  if(!data[date]){
-    data[date]={ samrat:defaultUser(), saborno:defaultUser() };
-  }
-}
-
-function renderCalendar(){
-  calendar.innerHTML="";
-  for(let i=1;i<=30;i++){
-    const d=`2026-04-${String(i).padStart(2,"0")}`;
-    calendar.innerHTML+=`<div class="day ${d===selectedDate?"active":""}" onclick="openDay('${d}')">${i}</div>`;
-  }
-}
-
-function openDay(date){
-  selectedDate=date;
-  initDay(date);
-  renderCalendar();
-  render();
-  updateLeaderboard();
-}
-
-function render(){
-  const d = data[selectedDate][currentUser];
-
-  habits.innerHTML="";
-  Object.keys(d.habits).forEach(h=>{
-    habits.innerHTML+=`
+/* HABITS UI */
+function renderHabits(){
+  let html="";
+  for(let h in habitsState){
+    html+=`
     <label>
-    <input type="checkbox" ${d.habits[h]?"checked":""}
-    onchange="toggleHabit('${h}')">${h}
-    </label><br>`;
-  });
-
-  const scoreVal = Object.values(d.habits).filter(x=>x).length;
-  score.innerText="Score: "+scoreVal;
-  streak.innerText="Streak: "+d.streak;
-
-  todos.innerHTML="";
-  d.todos.forEach((t,i)=>{
-    todos.innerHTML+=`
-    <div>
-    <input type="checkbox" ${t.done?"checked":""}
-    onchange="toggleTodo(${i})">
-    ${t.text}
-    </div>`;
-  });
+    <input type="checkbox" onchange="toggleHabit('${h}')">
+    ${h}
+    </label>`;
+  }
+  habits.innerHTML=html;
 }
 
 function toggleHabit(h){
-  const d = data[selectedDate][currentUser];
-  d.habits[h]=!d.habits[h];
-
-  const scoreVal = Object.values(d.habits).filter(x=>x).length;
-  const yesterday = new Date(Date.now()-86400000).toISOString().split("T")[0];
-
-  if(d.lastActive===yesterday && scoreVal>0) d.streak++;
-  else if(scoreVal>0) d.streak=1;
-
-  d.lastActive=selectedDate;
-
-  save();
-  render();
-  updateLeaderboard();
-  drawLoginChart();
+  habitsState[h]=!habitsState[h];
 }
 
-function addTodo(){
-  const d = data[selectedDate][currentUser];
-  d.todos.push({ text:todoInput.value, done:false });
-  todoInput.value="";
-  save();
-  render();
+/* SUBMIT DATA */
+function submitData(){
+  const score = Object.values(habitsState).filter(x=>x).length;
+  score.innerText = "Score: " + score;
+
+  const entry = {
+    date: new Date().toISOString().split("T")[0],
+    user: currentUser,
+    score: score
+  };
+
+  logs.push(entry);
+  sendData();
 }
 
-function toggleTodo(i){
-  const t = data[selectedDate][currentUser].todos[i];
-  t.done=!t.done;
-  save();
-  render();
-}
-
-function updateLeaderboard(){
-  let sScore=0, saScore=0;
-
-  Object.values(data).forEach(day=>{
-    sScore += Object.values(day.samrat.habits).filter(x=>x).length;
-    saScore += Object.values(day.saborno.habits).filter(x=>x).length;
+/* SEND TO JSONBIN */
+function sendData(){
+  fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`,{
+    method:"PUT",
+    headers:{
+      "Content-Type":"application/json",
+      "X-Master-Key":API_KEY
+    },
+    body: JSON.stringify(logs)
+  })
+  .then(()=>{
+    fetchData();
   });
-
-  let leader="Tie";
-  if(sScore>saScore) leader="Samrat 🔥";
-  else if(saScore>sScore) leader="Saborno 🔥";
-
-  leaderboard.innerHTML=`
-  Leader: ${leader}<br>
-  Samrat: ${sScore}<br>
-  Saborno: ${saScore}`;
 }
 
-/* 📊 LOGIN PAGE CHART */
-function drawLoginChart(){
+/* FETCH DATA */
+function fetchData(){
+  fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`,{
+    headers:{ "X-Master-Key":API_KEY }
+  })
+  .then(res=>res.json())
+  .then(data=>{
+    logs = data.record || [];
+    drawChart();
+  });
+}
+
+/* DRAW GRAPH */
+function drawChart(){
   const labels = [];
   const samratData = [];
   const sabornoData = [];
 
-  Object.keys(data).sort().forEach(date=>{
-    labels.push(date.slice(5));
+  logs.forEach(e=>{
+    if(!labels.includes(e.date)) labels.push(e.date);
+  });
 
-    const s = Object.values(data[date].samrat.habits).filter(x=>x).length;
-    const sa = Object.values(data[date].saborno.habits).filter(x=>x).length;
+  labels.sort();
+
+  labels.forEach(date=>{
+    let s=0, sa=0;
+
+    logs.forEach(e=>{
+      if(e.date===date){
+        if(e.user==="samrat") s=e.score;
+        if(e.user==="saborno") sa=e.score;
+      }
+    });
 
     samratData.push(s);
     sabornoData.push(sa);
   });
 
-  const ctx = document.getElementById("loginChart");
-  if(!ctx) return;
+  if(chart) chart.destroy();
 
-  if(chartInstance) chartInstance.destroy();
-
-  chartInstance = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels: labels,
-      datasets: [
-        { label: "Samrat", data: samratData },
-        { label: "Saborno", data: sabornoData }
+  chart = new Chart(document.getElementById("chart"),{
+    type:"line",
+    data:{
+      labels:labels,
+      datasets:[
+        { label:"Samrat", data:samratData },
+        { label:"Saborno", data:sabornoData }
       ]
     }
   });
 }
 
-drawLoginChart();
+/* AUTO LOAD */
+fetchData();
 
 if(currentUser){
   start();
